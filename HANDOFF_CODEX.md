@@ -20,10 +20,20 @@ than silently replacing it. Use real, incremental commits; do not rewrite histor
 
 ## Running log and commits
 
-1. Initial audit and handoff creation: this commit. No source changes yet.
+1. `0d98a26` — Initial audit and handoff creation. No source changes yet.
    Independent work is assigned for core math/entropy, topology, and GMM/notebook;
    the coordinating agent owns ingestion, pipeline, documentation, hygiene, and
    all commits. Agents do not edit this handoff or the Git index.
+
+2. Hygiene setup (current commit): add ignore rules and runtime dependencies,
+   untrack existing bytecode/Numba caches/notebook checkpoint, add package markers.
+   A Python 3.12.6 `.venv` now contains dependencies. The first download was
+   blocked by sandbox networking; an approved retry encountered a TLS interruption;
+   a second approved retry succeeded. No global environment was modified.
+3. Source consolidation is present but not yet committed: math, entropy, topology,
+   GMM, and notebook changes await coordinated test runs/review. Shared quote
+   schema, offline toy-data generator, English pipeline, and bounded stream
+   capture have been written. Mock HTTP engine migration and docs remain pending.
 
 ## Pending checklist
 
@@ -74,7 +84,9 @@ Planned locations (implementation and verification pending):
 
 ## Validation evidence and limits
 
-No new tests have run yet. Baseline Python is 3.14.4; NumPy, pandas, and pyarrow
+Math agent reports 28 checks passed in its system interpreter; the coordinating
+agent will record shared-environment verification separately. Topology/GMM tests
+are written and their first shared-environment runs are pending. Baseline Python is 3.14.4; NumPy, pandas, and pyarrow
 are available globally, but most required packages are missing. Python 3.12 also
 exists. A local isolated environment will be used where feasible. No real-market
 validation or performance benchmark is planned or claimed.
@@ -94,6 +106,6 @@ validation or performance benchmark is planned or claimed.
 ## Exact next step
 
 From the repository root, run `git status --short` and
-`cat HANDOFF_CODEX.md`. Then finish `.gitignore`, dependency declarations and
-package markers; inspect the pending independent source changes before staging
-only one logical group at a time. Do not claim test results before executing them.
+`cat HANDOFF_CODEX.md`. Next migrate `core_orchestrator.py` into `src/ingestion/polling_engine.py`,
+finish ingestion tests, and inspect/commit the already written independent math,
+GMM and topology groups after their shared-environment test runs. Do not claim test results before executing them.

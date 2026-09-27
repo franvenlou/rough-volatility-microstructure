@@ -1,0 +1,27 @@
+# Python and Numba generated files
+__pycache__/
+*.py[cod]
+*.nbc
+*.nbi
+.ipynb_checkpoints/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local environments and packaging output
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+
+# Market captures and generated figures
+*.parquet
+*.arrow
+*.feather
+/data/
+/outputs/
+/topological_regime_isolation.png
+
+# Local machine files
+.DS_Store

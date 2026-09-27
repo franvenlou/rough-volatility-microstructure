@@ -1,0 +1,12 @@
+# Runtime dependencies; reproducible tested versions are in requirements-tested.txt.
+numpy
+pandas
+numba
+scikit-learn
+networkx
+matplotlib
+# NetworkX Kamada-Kawai layout calls SciPy internally.
+scipy
+pyarrow
+aiohttp
+websockets
