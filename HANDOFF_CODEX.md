@@ -25,7 +25,7 @@ than silently replacing it. Use real, incremental commits; do not rewrite histor
    the coordinating agent owns ingestion, pipeline, documentation, hygiene, and
    all commits. Agents do not edit this handoff or the Git index.
 
-2. Hygiene setup (current commit): add ignore rules and runtime dependencies,
+2. `93f2d55` — Hygiene setup: add ignore rules and runtime dependencies,
    untrack existing bytecode/Numba caches/notebook checkpoint, add package markers.
    A Python 3.12.6 `.venv` now contains dependencies. The first download was
    blocked by sandbox networking; an approved retry encountered a TLS interruption;
@@ -34,6 +34,14 @@ than silently replacing it. Use real, incremental commits; do not rewrite histor
    GMM, and notebook changes await coordinated test runs/review. Shared quote
    schema, offline toy-data generator, English pipeline, and bounded stream
    capture have been written. Mock HTTP engine migration and docs remain pending.
+
+4. Core math consolidation (current commit): remove root Hurst/entropy scripts,
+   retain q=1 default and optional q=2, correct OLS normalization, validate
+   undefined inputs, and preserve imbalance/discrete entropy/MI under `src`.
+   A new regression test caught constant 1e-8 return smoothing roundoff producing
+   false finite H estimates. Constant inputs now remain bit-for-bit constant.
+   The 16 core + 13 entropy + 8 ingestion checks pass in the shared environment.
+   The ingestion files/tests are still unstaged for their own logical commit.
 
 ## Pending checklist
 
@@ -58,6 +66,19 @@ Planned locations (implementation and verification pending):
 - `src/topology/portfolio.py`: English filename for existing portfolio experiment.
 - `src/ingestion/`: retain real quote capture and any useful mock-engine primitives.
 - Run entrypoints from the repository root with `python -m src.<module>`.
+
+### Completed core decisions
+
+The `src` first-moment estimator is kept as the default because it is used by both
+quote analysis paths. The root second-moment method survives as `moment_order=2`
+in the same function, rather than being silently substituted. Shannon volume
+entropy is one canonical function; discrete entropy counts observed labels and
+uses that function for probabilities. Imbalance and MI are distinct functionality,
+so they are preserved in `src/microstruct/entropy.py`. Arbitrary entropy bases now
+use log(base); sparse labels no longer allocate arrays up to the largest label.
+Volume imbalance uses explicit zero-depth handling instead of adding epsilon to
+nonzero denominators. Numba remains on the Hurst and smoothing kernels; no
+performance improvement or parity claim is made for other helpers.
 
 ## Mathematical concerns and defaults
 
@@ -90,6 +111,18 @@ are written and their first shared-environment runs are pending. Baseline Python
 are available globally, but most required packages are missing. Python 3.12 also
 exists. A local isolated environment will be used where feasible. No real-market
 validation or performance benchmark is planned or claimed.
+
+Shared Python 3.12.6 / NumPy 2.5.3 / Numba 0.67.0 / llvmlite 0.49.0:
+- 29 core/entropy tests pass, including the new exact constant-smoother regression.
+- Seeded H=0.2 fBm ensemble (24 paths, 512 observations, max lag 20) means:
+  q=1 0.207654933; q=2 0.205535062. Brownian H=0.5 (100,000 observations,
+  max lag 50) estimates: 0.494148722 and 0.493245006. These are implementation
+  sanity checks, not estimator calibration, confidence intervals, or market evidence.
+- Initial ingestion tests found one failure (constant input artifact), fixed as
+  above; all eight now pass, using a fake WebSocket connection only.
+- Independent agents also report 11 GMM and 14 topology tests pass, both GMM
+  CLIs and notebook cells execute, and topology demos execute. Full-suite
+  coordinating run remains pending after final review.
 
 ## OPEN QUESTION FOR FRANCISCO
 
