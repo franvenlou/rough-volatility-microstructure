@@ -1,45 +1,80 @@
+"""Collect best quotes from Binance's partial-depth stream into one Parquet file.
+
+The subscription requests 20 levels at 100 ms updates; only the first bid and ask
+are retained. Records are buffered in memory and written after capture. This
+prototype has no reconnect, sequence-gap recovery, or exchange timestamp audit.
+"""
+
+import argparse
 import asyncio
-import websockets
+from datetime import datetime, timezone
 import json
+import math
+from pathlib import Path
+
+import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
-import pandas as pd
-from datetime import datetime
-import os
+import websockets
 
-async def stream_binance_lob(symbol: str, duration_seconds: int = 60):
-    # Aseguramos que el directorio 'data' exista antes de guardar
-    os.makedirs('data', exist_ok=True)
-    
-    uri = f"wss://stream.binance.com:9443/ws/{symbol}@depth20@100ms"
+from .snapshots import validate_snapshots
+
+
+async def stream_binance_lob(
+    symbol: str, duration_seconds: float = 60,
+    output_path: str | Path = "data/lob_snapshot.parquet",
+) -> Path:
+    """Capture for a bounded interval, timestamping local UTC receipt time.
+
+    Connection setup has its own timeout; capture starts after connecting.
+    An idle stream cannot block indefinitely in recv().
+    """
+    if not math.isfinite(duration_seconds) or duration_seconds <= 0:
+        raise ValueError("duration_seconds must be finite and positive.")
+    if not symbol or not symbol.isascii() or not symbol.isalnum():
+        raise ValueError("symbol must contain ASCII letters and digits only.")
+    uri = f"wss://stream.binance.com:9443/ws/{symbol.lower()}@depth20@100ms"
     records = []
-    start_time = asyncio.get_event_loop().time()
-    
-    print(f"Iniciando conexión WebSocket con Binance para {symbol.upper()}...")
-    
-    async with websockets.connect(uri) as websocket:
-        print(f"Conexión establecida. Capturando LOB durante {duration_seconds} segundos...")
-        while (asyncio.get_event_loop().time() - start_time) < duration_seconds:
-            response = await websocket.recv()
+    loop = asyncio.get_running_loop()
+    print(f"Connecting to the {symbol.upper()} partial-depth stream.")
+    async with websockets.connect(uri, open_timeout=10) as websocket:
+        deadline = loop.time() + duration_seconds
+        while True:
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                break
+            try:
+                response = await asyncio.wait_for(websocket.recv(), timeout=remaining)
+            except asyncio.TimeoutError:
+                break
             data = json.loads(response)
-            
-            # API de Binance para @depth20 usa 'bids' y 'asks'
-            best_bid_price, best_bid_qty = float(data['bids'][0][0]), float(data['bids'][0][1])
-            best_ask_price, best_ask_qty = float(data['asks'][0][0]), float(data['asks'][0][1])
-            
+            if not data.get("bids") or not data.get("asks"):
+                continue
+            bid_price, bid_volume = map(float, data["bids"][0])
+            ask_price, ask_volume = map(float, data["asks"][0])
             records.append({
-                "timestamp": datetime.utcnow(),
-                "bid_price": best_bid_price, "bid_vol": best_bid_qty,
-                "ask_price": best_ask_price, "ask_vol": best_ask_qty
+                "timestamp": datetime.now(timezone.utc),
+                "bid_price": bid_price, "bid_vol": bid_volume,
+                "ask_price": ask_price, "ask_vol": ask_volume,
             })
-            
-    print(f"Captura finalizada. Procesando {len(records)} snapshots de alta frecuencia...")
-    
-    # Guardado ultra-rápido en formato columnar (Parquet)
-    df = pd.DataFrame(records)
-    table = pa.Table.from_pandas(df)
-    pq.write_table(table, 'data/lob_snapshot.parquet', compression='snappy')
-    print("Datos compilados exitosamente en 'data/lob_snapshot.parquet'.")
+    if len(records) < 2:
+        raise ValueError("Captured fewer than two usable quotes; no file was written.")
+    frame = validate_snapshots(pd.DataFrame(records))
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    pq.write_table(pa.Table.from_pandas(frame, preserve_index=False), output, compression="snappy")
+    print(f"Wrote {len(frame)} best-quote snapshots to {output}.")
+    return output
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--symbol", default="btcusdt")
+    parser.add_argument("--duration", type=float, default=60)
+    parser.add_argument("--output", type=Path, default=Path("data/lob_snapshot.parquet"))
+    args = parser.parse_args()
+    asyncio.run(stream_binance_lob(args.symbol, args.duration, args.output))
+
 
 if __name__ == "__main__":
-    asyncio.run(stream_binance_lob("btcusdt", 60))
+    main()

@@ -35,7 +35,7 @@ than silently replacing it. Use real, incremental commits; do not rewrite histor
    schema, offline toy-data generator, English pipeline, and bounded stream
    capture have been written. Mock HTTP engine migration and docs remain pending.
 
-4. Core math consolidation (current commit): remove root Hurst/entropy scripts,
+4. `383c0e8` — Core math consolidation: remove root Hurst/entropy scripts,
    retain q=1 default and optional q=2, correct OLS normalization, validate
    undefined inputs, and preserve imbalance/discrete entropy/MI under `src`.
    A new regression test caught constant 1e-8 return smoothing roundoff producing
@@ -43,12 +43,26 @@ than silently replacing it. Use real, incremental commits; do not rewrite histor
    The 16 core + 13 entropy + 8 ingestion checks pass in the shared environment.
    The ingestion files/tests are still unstaged for their own logical commit.
 
+5. Ingestion and pipeline cleanup (current commit): move the custom-HTTP polling
+   engine under `src/ingestion`, delete the root orchestrator, remove the dummy
+   endpoint/no-op demo, and keep the distinct trade-buffer functionality.
+   Callbacks now receive observed rows in arrival order and independent read-only
+   copies, instead of uninitialized, wrapped, subsequently mutated buffer views.
+   Callbacks still execute on the event loop and must be short. Request failures
+   and cancellation are explicit; no backoff/reconnection system was added.
+   The Binance adapter now bounds recv waits, uses aware local UTC timestamps,
+   exposes CLI options, and rejects empty output. It still retains only best
+   quotes in memory and writes once after capture.
+   Shared snapshot validation, deterministic synthetic Parquet generation, and
+   English threshold diagnostics make the offline pipeline executable.
+   All eight ingestion/pipeline tests pass with no external market connection.
+
 ## Pending checklist
 
 - [ ] A: README installation, runnable usage, status/limitations, license disclosure.
 - [ ] B: Consolidate all five root Python scripts into canonical `src` modules.
 - [ ] C: Remove instructional/trailer comments and translate all shipped text.
-- [ ] D: Replace threshold-triggered empirical/causal claims with diagnostics.
+- [x] D: Replace threshold-triggered empirical/causal claims with diagnostics.
 - [ ] E: Ignore/untrack generated files; declare actual dependencies; add real tests.
 - [ ] Review every changed module; execute tests and offline end-to-end examples.
 - [ ] Record each logical commit and final exact resume command here.
@@ -64,7 +78,11 @@ Planned locations (implementation and verification pending):
 - `src/topology/pmfg_filter.py`: retain PMFG; `network_filters.py` preserves distinct
   Ledoit-Wolf, MST, and face-insertion graph experiments from the root script.
 - `src/topology/portfolio.py`: English filename for existing portfolio experiment.
-- `src/ingestion/`: retain real quote capture and any useful mock-engine primitives.
+- `src/ingestion/lob_streamer.py`: retain actual quote capture.
+- `src/ingestion/polling_engine.py`: preserve custom-endpoint trade/quote buffers
+  separately; the old mock URL is not a real data source.
+- `src/ingestion/snapshots.py`: shared quote schema and return/volume features.
+- `src/ingestion/synthetic_snapshot.py`: reproducible offline input generation.
 - Run entrypoints from the repository root with `python -m src.<module>`.
 
 ### Completed core decisions
@@ -139,6 +157,5 @@ Shared Python 3.12.6 / NumPy 2.5.3 / Numba 0.67.0 / llvmlite 0.49.0:
 ## Exact next step
 
 From the repository root, run `git status --short` and
-`cat HANDOFF_CODEX.md`. Next migrate `core_orchestrator.py` into `src/ingestion/polling_engine.py`,
-finish ingestion tests, and inspect/commit the already written independent math,
-GMM and topology groups after their shared-environment test runs. Do not claim test results before executing them.
+`cat HANDOFF_CODEX.md`. Next inspect/commit GMM and topology groups, complete README and tested
+dependency snapshot, then execute the complete suite and documented offline commands. Do not claim test results before executing them.
