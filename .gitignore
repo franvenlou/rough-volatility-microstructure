@@ -25,3 +25,6 @@ dist/
 
 # Local machine files
 .DS_Store
+
+HANDOFF_CODEX.md
+requirements.txt

@@ -1,68 +1,57 @@
-import numpy as np
+"""Greedy planar filtering of a correlation matrix."""
+
 import networkx as nx
+import numpy as np
+
 
 def build_pmfg(correlation_matrix: np.ndarray) -> nx.Graph:
-    """
-    Construye el Planar Maximally Filtered Graph (PMFG) a partir de una matriz de correlación empírica.
-    Aplica el teorema de Kuratowski para garantizar un género topológico g=0.
-    """
-    n_nodes = correlation_matrix.shape[0]
-    
-    # Validación axiomática de la dimensionalidad
-    if correlation_matrix.shape[0] != correlation_matrix.shape[1]:
-        raise ValueError("La matriz de correlación debe ser un operador lineal cuadrado (NxN).")
+    """Keep edges in descending signed-correlation order while preserving planarity.
 
-    # Extraemos la triángular superior para evitar duplicidades
+    This is a Planar Maximally Filtered Graph (PMFG): the greedy procedure
+    produces a maximal planar graph, not a global optimum over planar graphs.
+    Planarity alone does not establish that retained correlations are signal.
+    """
+    correlation_matrix = np.asarray(correlation_matrix, dtype=float)
+    if (
+        correlation_matrix.ndim != 2
+        or correlation_matrix.shape[0] != correlation_matrix.shape[1]
+        or correlation_matrix.shape[0] == 0
+    ):
+        raise ValueError("The correlation matrix must be nonempty and square.")
+    if not np.all(np.isfinite(correlation_matrix)):
+        raise ValueError("The correlation matrix must contain finite values.")
+    if not np.allclose(correlation_matrix, correlation_matrix.T):
+        raise ValueError("The correlation matrix must be symmetric.")
+
+    n_nodes = correlation_matrix.shape[0]
     i_idx, j_idx = np.triu_indices(n_nodes, k=1)
     correlations = correlation_matrix[i_idx, j_idx]
-
-    # Ordenamos topológicamente por la magnitud de la correlación (descendente)
     sorted_indices = np.argsort(correlations)[::-1]
-    
+
     pmfg = nx.Graph()
     pmfg.add_nodes_from(range(n_nodes))
-    
-    edges_added = 0
-    max_edges = 3 * (n_nodes - 2)
-    
+    max_edges = 3 * (n_nodes - 2) if n_nodes >= 3 else n_nodes * (n_nodes - 1) // 2
+
     for idx in sorted_indices:
         u, v = i_idx[idx], j_idx[idx]
-        weight = correlations[idx]
-        
-        pmfg.add_edge(u, v, weight=weight)
-        
-        # Test de planaridad algorítmica (Boyer-Myrvold o equivalente en NetworkX)
+        pmfg.add_edge(u, v, weight=correlations[idx])
         is_planar, _ = nx.check_planarity(pmfg)
-        
         if not is_planar:
-            # Si rompe el género 0, se desecha la arista (filtro de ruido)
             pmfg.remove_edge(u, v)
-        else:
-            edges_added += 1
-            if edges_added == max_edges:
-                break
-                
+        elif pmfg.number_of_edges() == max_edges:
+            break
+
     return pmfg
 
+
 if __name__ == "__main__":
-    print("Iniciando filtrado topológico PMFG sobre matriz de covarianza simulada...")
-    
-    # Generamos una matriz de correlación sintética de 10 activos (para validación del teorema)
+    print("Building a PMFG from synthetic returns...")
     np.random.seed(42)
     random_returns = np.random.randn(10, 1000)
     empirical_corr = np.corrcoef(random_returns)
-    
     pmfg_graph = build_pmfg(empirical_corr)
-    
-    print("\n" + "="*50)
-    print("ANÁLISIS TOPOLÓGICO COMPLETADO")
-    print("="*50)
-    print(f"Nodos procesados (Activos del Universo) : {pmfg_graph.number_of_nodes()}")
-    print(f"Aristas de Información retenidas        : {pmfg_graph.number_of_edges()}")
-    print(f"Límite teórico de Euler (3*(V-2))       : {3 * (10 - 2)}")
-    print("="*50)
-    print("Diagnóstico: El ruido espurio ha sido filtrado preservando los cliques sectoriales.")
 
-# Para compilarlo: python -m py_compile src/topology/pmfg_filter.py
-# Para ejecutarlo: python src/topology/pmfg_filter.py
-# endprogram
+    print(f"Assets: {pmfg_graph.number_of_nodes()}")
+    print(f"Retained edges: {pmfg_graph.number_of_edges()}")
+    print(f"Planar edge bound for this universe: {3 * (10 - 2)}")
+    print("This synthetic example checks graph structure, not statistical noise removal.")
